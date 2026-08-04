@@ -1,0 +1,15 @@
+# 敏感配置（含明文密码，绝不入库）
+config.json
+
+# 环境与缓存
+.venv/
+__pycache__/
+*.pyc
+edge-profile/
+
+# 开发截图（仅根目录）
+/*.png
+
+# 系统文件
+Thumbs.db
+Desktop.ini

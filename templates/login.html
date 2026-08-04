@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Burn Memory · Login</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  /* 全站统一手写连笔字体（英文 Ink Free，中文方正舒体行楷毛笔风） */
+  body {
+    font-family: 'Ink Free', 'Segoe Script', 'Brush Script MT', 'Lucida Handwriting',
+                 'FZShuTi', '方正舒体', 'KaiTi', '楷体', cursive;
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    color:#1a2b4a;
+    background:#000000;
+    overflow:hidden; position:relative;
+  }
+
+  /* 底图容器：固定尺寸与图片比例一致（上下各多出浮动幅度，浮动时不留黑边）
+     初始隐藏，点击 HELLO 后渐渐显现 */
+  .bg-wrap {
+    position:fixed; right:0; top:-12px;
+    height:calc(100vh + 24px); width:calc(131.25vh + 31.5px);
+    z-index:0; pointer-events:none; overflow:hidden;
+    opacity:0;
+    transition:opacity 1.6s ease .35s;
+  }
+  body.open .bg-wrap { opacity:1; }
+
+  /* 底图原样铺满容器（比例一致，无变形） */
+  .bg-art {
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:fill;
+  }
+
+  /* 整图浮动：幅度加大，灵动感更强 */
+  .bg-wrap { animation:floaty 5.5s ease-in-out infinite; }
+  @keyframes floaty {
+    0%, 100% { transform:translateY(0); }
+    50%      { transform:translateY(-12px); }
+  }
+
+  /* 登录卡片独立浮动：与背景错开节奏，悬浮感明显 */
+  .card { animation:floatCard 4.5s ease-in-out infinite; }
+  @keyframes floatCard {
+    0%, 100% { transform:translateY(0); }
+    50%      { transform:translateY(-8px); }
+  }
+
+  /* HELLO 按钮：位于登录名片位置，黑色统一手写字体 */
+  .hello-btn {
+    position:fixed; left:50%; top:50%;
+    transform:translate(-50%,-50%);
+    width:118px; height:118px; border-radius:50%;
+    background:rgba(255,255,255,.88);
+    border:1px solid rgba(255,255,255,.95);
+    color:#000; font-size:27px; font-weight:700; letter-spacing:4px;
+    font-family: inherit; cursor:pointer; z-index:20;
+    box-shadow:0 14px 44px rgba(0,0,0,.55), 0 0 34px rgba(122,178,255,.22);
+    transition:opacity .35s ease, transform .35s ease, box-shadow .3s ease;
+  }
+  .hello-btn:hover {
+    box-shadow:0 16px 52px rgba(0,0,0,.6), 0 0 48px rgba(122,178,255,.45);
+    transform:translate(-50%,-50%) scale(1.05);
+  }
+  .hello-btn.hide {
+    opacity:0; transform:translate(-50%,-50%) scale(.5);
+    pointer-events:none;
+  }
+
+  /* 纸张折叠展开：包裹层负责 3D 翻开，卡片内部保持浮动 */
+  .card-wrap {
+    position:relative; z-index:2;
+    transform-origin:top center;
+    transform:perspective(1500px) rotateX(-92deg);
+    opacity:0;
+    transition:transform 1.3s cubic-bezier(.22,.72,.28,1), opacity .55s ease .2s;
+  }
+  body.open .card-wrap {
+    transform:perspective(1500px) rotateX(0deg);
+    opacity:1;
+  }
+
+  /* 纸张质感：轻微折痕与纸纹 */
+  .card {
+    position:relative; z-index:2;
+    width:400px; max-width:92vw;
+    padding:52px 46px 36px;
+    background:linear-gradient(180deg, rgba(255,255,255,.2) 0%, rgba(255,255,255,.13) 60%, rgba(255,255,255,.17) 100%);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,.28);
+    border-radius:20px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  /* 顶部折痕线（纸张折叠痕迹） */
+  .card::after {
+    content:""; position:absolute; top:0; left:10%; right:10%;
+    height:2px; border-radius:2px; pointer-events:none;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent);
+  }
+
+  /* 淡蓝色背景光点（黑底微光） */
+  body::before {
+    content:""; position:fixed; inset:0; pointer-events:none;
+    background-image:
+      radial-gradient(1px 1px at 22% 18%, rgba(120,180,255,.4), transparent),
+      radial-gradient(1px 1px at 68% 12%, rgba(120,180,255,.32), transparent),
+      radial-gradient(1.5px 1.5px at 84% 34%, rgba(120,180,255,.36), transparent),
+      radial-gradient(1px 1px at 38% 78%, rgba(120,180,255,.3), transparent),
+      radial-gradient(1px 1px at 12% 62%, rgba(120,180,255,.32), transparent),
+      radial-gradient(1.5px 1.5px at 92% 68%, rgba(120,180,255,.34), transparent),
+      radial-gradient(1px 1px at 55% 44%, rgba(120,180,255,.24), transparent),
+      radial-gradient(1px 1px at 74% 86%, rgba(120,180,255,.28), transparent);
+    opacity:.55;
+  }
+
+  /* 顶部细线装饰 */
+  .card::before {
+    content:""; display:block; width:44px; height:2px; margin:0 auto 24px;
+    background:linear-gradient(90deg, transparent, #3b82f6, transparent);
+    border-radius:2px;
+  }
+
+  .title {
+    text-align:center;
+  }
+  .title .line1 {
+    display:block; font-size:24px; letter-spacing:2px; color:#000; font-weight:400;
+  }
+  .title .line2 {
+    display:block; margin-top:4px;
+    font-size:46px; font-weight:700; letter-spacing:4px; color:#000;
+  }
+  .subtitle {
+    margin:12px auto 30px; text-align:center;
+    font-size:17px; letter-spacing:1px;
+    color:#4a7dd6;
+    text-shadow:0 0 10px rgba(120,160,230,.35);
+  }
+
+  .field { margin-bottom:16px; }
+  .field label {
+    display:block; font-size:15px; letter-spacing:1px;
+    color:#3b82f6; margin-bottom:6px;
+    text-shadow:0 0 8px rgba(120,160,230,.3);
+  }
+  input[type=text], input[type=password] {
+    width:100%; padding:12px 16px;
+    border-radius:11px; border:1px solid rgba(120,160,230,.45);
+    background:rgba(255,255,255,.55); color:#1a2b4a; font-size:17px; outline:none;
+    font-family: inherit;
+    transition:border-color .25s, box-shadow .25s;
+  }
+  input::placeholder { color:#6b7f9e; font-size:16px; }
+  input:focus {
+    border-color:#7ab2ff;
+    box-shadow:0 0 0 3px rgba(122,178,255,.25), 0 0 14px rgba(122,178,255,.2);
+  }
+
+  button {
+    width:100%; margin-top:8px; padding:13px;
+    border:none; border-radius:11px; cursor:pointer;
+    font-size:19px; font-weight:700; letter-spacing:5px; color:#fff;
+    font-family: inherit;
+    background:linear-gradient(135deg, #4f8ef7 0%, #3b82f6 50%, #2563eb 100%);
+    box-shadow:0 8px 24px rgba(59,130,246,.32);
+    transition:filter .25s, transform .15s, box-shadow .25s;
+  }
+  button:hover {
+    filter:brightness(1.08);
+    transform:translateY(-1px);
+    box-shadow:0 12px 30px rgba(59,130,246,.42);
+  }
+  button:active { transform:translateY(0); }
+
+  .flash {
+    text-align:center; color:#d64545; font-size:15px;
+    margin-bottom:14px; min-height:19px; letter-spacing:1px;
+  }
+
+  /* 卡片四角动图装饰 */
+  .corner {
+    position:absolute; width:44px; height:44px;
+    border-radius:12px; background:#fff;
+    box-shadow:0 4px 14px rgba(0,0,0,.4);
+    z-index:5; pointer-events:none;
+  }
+  .corner.tl { top:-18px; left:-18px; }
+  .corner.tr { top:-18px; right:-18px; }
+  .corner.bl { bottom:-18px; left:-18px; }
+  .corner.br { bottom:-18px; right:-18px; }
+
+  .foot {
+    margin-top:26px; text-align:center;
+    font-size:22px; color:#3b82f6; letter-spacing:3px;
+    text-shadow:0 0 12px rgba(120,160,230,.45);
+  }
+
+  /* BGM 播放器按钮：专辑封面 + 播放时旋转（黑胶效果）
+     初始隐藏，点击 HELLO 展开后淡入 */
+  .music-btn {
+    position:fixed; top:22px; right:22px; z-index:10;
+    width:64px; height:64px; border-radius:50%;
+    border:2px solid rgba(255,255,255,.35);
+    cursor:pointer;
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    box-shadow:0 6px 20px rgba(0,0,0,.5), 0 0 18px rgba(122,178,255,.15);
+    transition:opacity .6s ease .5s, border-color .3s, box-shadow .3s;
+    overflow:hidden; padding:0;
+    opacity:0; pointer-events:none;
+  }
+  body.open .music-btn { opacity:1; pointer-events:auto; }
+  /* 专辑封面：圆形裁剪填满按钮 */
+  .music-btn .cover {
+    display:block; width:100%; height:100%;
+    object-fit:cover; border-radius:50%;
+  }
+  /* 播放时封面旋转（黑胶滚动动画） */
+  .music-btn.playing .cover { animation:vinylSpin 9s linear infinite; }
+  @keyframes vinylSpin { from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+  /* 黑胶轴心点 */
+  .music-btn::after {
+    content:""; position:absolute; left:50%; top:50%;
+    width:14px; height:14px; border-radius:50%;
+    background:rgba(0,0,0,.55);
+    border:2px solid rgba(255,255,255,.6);
+    transform:translate(-50%,-50%);
+    pointer-events:none;
+  }
+  .music-btn:hover { border-color:rgba(122,178,255,.8); box-shadow:0 8px 26px rgba(0,0,0,.55), 0 0 26px rgba(122,178,255,.35); }
+  .music-btn.playing { border-color:rgba(122,178,255,.7); box-shadow:0 8px 26px rgba(0,0,0,.55), 0 0 30px rgba(122,178,255,.4); }
+
+  /* 左侧歌词面板：最左侧，中英对照同步滚动
+     初始折叠隐藏，点击 HELLO 后与登录名片同步纸张展开 */
+  .lyrics-panel {
+    position:fixed; left:26px; top:50%;
+    width:min(440px, 34vw); height:64vh;
+    overflow:hidden; z-index:1; pointer-events:none;
+    background:rgba(0,0,0,.35);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(120,160,230,.18); border-radius:16px;
+    box-shadow:0 14px 44px rgba(0,0,0,.45);
+    -webkit-mask-image:linear-gradient(180deg, transparent 0%, #000 10%, #000 90%, transparent 100%);
+    mask-image:linear-gradient(180deg, transparent 0%, #000 10%, #000 90%, transparent 100%);
+    transform-origin:top center;
+    transform:perspective(1400px) translateY(-50%) rotateX(-92deg);
+    opacity:0;
+    transition:transform 1.4s cubic-bezier(.22,.72,.28,1) .25s, opacity .5s ease .4s;
+  }
+  body.open .lyrics-panel {
+    transform:perspective(1400px) translateY(-50%) rotateX(0deg);
+    opacity:1;
+  }
+  .lyrics-inner { padding:8px 18px; transition:transform .55s ease; }
+  .lyric-line { padding:7px 0; }
+  .lyric-line .en {
+    display:block; font-size:16.5px; line-height:1.45; color:#e6e9f2;
+    opacity:.5; letter-spacing:.5px;
+    transition:opacity .4s ease, text-shadow .4s ease, font-size .4s ease;
+  }
+  .lyric-line .cn {
+    display:block; font-size:12px; line-height:1.45; color:#8fa3c9;
+    opacity:.45; letter-spacing:1px;
+    font-family:'FZShuTi','方正舒体','KaiTi','楷体','Microsoft YaHei',sans-serif;
+    transition:opacity .4s ease, color .4s ease;
+  }
+  .lyric-line.active .en {
+    opacity:1; font-size:19px;
+    text-shadow:0 0 14px rgba(122,178,255,.95), 0 0 30px rgba(122,178,255,.4);
+  }
+  .lyric-line.active .cn { opacity:.95; color:#b8cdf5; }
+  @media (max-width: 1240px) { .lyrics-panel { display:none; } }
+</style>
+</head>
+<body>
+  <div class="bg-wrap">
+    <img class="bg-art" src="/static/bg-art.jpg" alt="">
+  </div>
+  <audio id="bgm" src="/static/bgm.mp3" loop preload="auto"></audio>
+  <button id="musicBtn" class="music-btn" title="播放/暂停音乐"><img class="cover" src="/static/cover.jpg" alt="Shots (Broiler Remix)"></button>
+  <button id="helloBtn" class="hello-btn">HELLO</button>
+  <div class="lyrics-panel" id="lyricsPanel">
+    <div class="lyrics-inner" id="lyricsInner"></div>
+  </div>
+  <div class="card-wrap" id="cardWrap">
+    <div class="card">
+    <img class="corner tl" src="/static/corner-emoji.gif" alt="">
+    <img class="corner tr" src="/static/corner-emoji.gif" alt="">
+    <img class="corner bl" src="/static/corner-emoji.gif" alt="">
+    <img class="corner br" src="/static/corner-emoji.gif" alt="">
+    <div class="title">
+      <span class="line1">here is my</span>
+      <span class="line2">BURN MEMORY</span>
+    </div>
+    <div class="subtitle">I've run so far can i <em>come home</em></div>
+
+    <form method="post" action="/login" autocomplete="off">
+      <div class="flash">{% with m = get_flashed_messages() %}{% if m %}{{ m[0] }}{% endif %}{% endwith %}</div>
+      <div class="field">
+        <label>Username / Email</label>
+        <input type="text" name="identifier" placeholder="Username or Email" autocomplete="off" required autofocus>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="Password" autocomplete="new-password" required>
+      </div>
+      <button type="submit">START</button>
+    </form>
+
+    <div class="foot">private</div>
+    </div>
+  </div>
+
+<script>
+/* 开场控制：点击 HELLO 时展开名片 + 开始播放音乐；歌词随播放同步滚动 */
+(function(){
+  var bgm = document.getElementById('bgm');
+  var btn = document.getElementById('musicBtn');
+  var helloBtn = document.getElementById('helloBtn');
+  if (!bgm || !btn || !helloBtn) return;
+  bgm.volume = 0.10;   // 轻柔背景音量 10%
+
+  var played = false;   // 是否已成功播放过（防止暂停后误触发重播）
+
+  function start(){
+    var p = bgm.play();
+    if (p && p.then) {
+      p.then(function(){
+        played = true;
+        btn.classList.add('playing');
+      }).catch(function(){});
+    } else {
+      played = true;
+      btn.classList.add('playing');
+    }
+  }
+  function stop(){
+    bgm.pause();
+    btn.classList.remove('playing');
+  }
+
+  function open(){
+    document.body.classList.add('open');
+    helloBtn.classList.add('hide');
+    start();   // 仅在点击 HELLO（用户手势）时开始播放
+  }
+
+  // 手动点击 HELLO：只展开+播放，不绑定任何全局解锁监听
+  helloBtn.addEventListener('click', open);
+
+  // 自动展开场景（登录失败返回 / ?open=1）：播放可能被浏览器拦截，
+  // 此时才绑定一次性的"首次交互解锁"（触发一次即移除，不影响手动场景）
+  var unlockBound = false;
+  function bindUnlock(){
+    if (unlockBound) return;
+    unlockBound = true;
+    function unlock(){
+      if (bgm.paused){ start(); }
+      ['pointerdown','keydown','touchstart','click'].forEach(function(ev){
+        document.removeEventListener(ev, unlock);
+      });
+    }
+    ['pointerdown','keydown','touchstart','click'].forEach(function(ev){
+      document.addEventListener(ev, unlock);
+    });
+  }
+
+  var flash = document.querySelector('.flash');
+  if ((flash && flash.textContent.trim()) || location.search.indexOf('open=1') >= 0){
+    open();
+    bindUnlock();
+  }
+
+  // 音乐按钮切换播放/暂停
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    if (bgm.paused){ start(); } else { stop(); }
+  });
+})();
+
+/* 左侧歌词面板：解析 LRC（中英对照），播放时同步高亮滚动 */
+(function(){
+  var bgm = document.getElementById('bgm');
+  var panel = document.getElementById('lyricsPanel');
+  var inner = document.getElementById('lyricsInner');
+  if (!bgm || !panel || !inner) return;
+
+  var items = [];   // [{t, en, cn}]
+  var lineEls = [];
+
+  function esc(s){
+    return s.replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function parseLrc(text){
+    var lines = text.split('\n');
+    lines.forEach(function(line){
+      var m = line.match(/\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)/);
+      if (!m) return;
+      var t = parseInt(m[1],10)*60 + parseFloat(m[2]);
+      var content = (m[3]||'').trim();
+      if (!content) return;
+      // 跳过 作词/作曲 等元信息行
+      if (/作词|作曲|编曲|制作/.test(content) && !/[A-Za-z]{3}/.test(content.replace(/作词|作曲|编曲|制作.*$/, ''))) return;
+      // 英文 = 第一个中文字符之前；中文 = 剩余部分
+      var cnIdx = content.search(/[\u4e00-\u9fff]/);
+      var en = cnIdx === -1 ? content : content.slice(0, cnIdx).trim();
+      var cn = cnIdx === -1 ? '' : content.slice(cnIdx).trim();
+      if (en) items.push({t:t, en:en, cn:cn});
+    });
+    items.sort(function(a,b){ return a.t - b.t; });
+  }
+
+  function render(){
+    inner.innerHTML = '';
+    lineEls = [];
+    items.forEach(function(it){
+      var d = document.createElement('div');
+      d.className = 'lyric-line';
+      d.innerHTML = '<span class="en">' + esc(it.en) + '</span>'
+                  + (it.cn ? '<span class="cn">' + esc(it.cn) + '</span>' : '');
+      inner.appendChild(d);
+      lineEls.push(d);
+    });
+  }
+
+  function update(){
+    if (!lineEls.length) return;
+    var t = bgm.currentTime;
+    var idx = 0;
+    for (var i = 0; i < items.length; i++){
+      if (items[i].t <= t) idx = i;
+    }
+    for (var j = 0; j < lineEls.length; j++){
+      lineEls[j].classList.toggle('active', j === idx);
+    }
+    // 滚动居中
+    var lineH = lineEls[idx].offsetHeight || 40;
+    var panelH = panel.clientHeight || 500;
+    var off = idx * lineH - panelH/2 + lineH/2;
+    inner.style.transform = 'translateY(' + (-off) + 'px)';
+  }
+
+  fetch('/static/lyrics.lrc')
+    .then(function(r){ return r.text(); })
+    .then(function(text){
+      parseLrc(text);
+      render();
+      update();
+      bgm.addEventListener('timeupdate', update);
+    })
+    .catch(function(){ /* LRC 加载失败时静默忽略 */ });
+})();
+</script>
+</body>
+</html>

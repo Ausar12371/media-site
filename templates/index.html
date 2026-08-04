@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Burn Memory · Private</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'Ink Free', 'Segoe Script', 'Brush Script MT', 'Lucida Handwriting',
+                 'FZShuTi', '方正舒体', 'KaiTi', '楷体', cursive;
+    background:#000000; color:#e6e9f2; min-height:100vh;
+    position:relative; overflow:hidden;
+  }
+  /* 极光城市背景视频：全屏循环播放（静音） */
+  .bg-video {
+    position:fixed; inset:0; z-index:0;
+    width:100%; height:100%;
+    object-fit:cover; pointer-events:none;
+    filter:brightness(.75) saturate(1.1);
+  }
+
+  /* DREAM 板块上方引语（紫色调，与极光视频呼应） */
+  .dream-quote {
+    position:fixed; left:44px; top:30px; z-index:5;
+    font-size:23px; letter-spacing:1.5px; white-space:nowrap;
+    color:#b388ff;
+    text-shadow:0 0 14px rgba(150,110,255,.55), 0 0 30px rgba(150,110,255,.25);
+    pointer-events:none;
+  }
+
+  /* 淡蓝星尘背景（叠加在视频上，增加氛围） */
+  body::before {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      radial-gradient(1px 1px at 22% 18%, rgba(180,220,255,.5), transparent),
+      radial-gradient(1px 1px at 68% 12%, rgba(180,220,255,.4), transparent),
+      radial-gradient(1.5px 1.5px at 84% 34%, rgba(180,220,255,.45), transparent),
+      radial-gradient(1px 1px at 38% 78%, rgba(180,220,255,.38), transparent),
+      radial-gradient(1px 1px at 12% 62%, rgba(180,220,255,.4), transparent),
+      radial-gradient(1.5px 1.5px at 92% 68%, rgba(180,220,255,.42), transparent),
+      radial-gradient(1px 1px at 55% 44%, rgba(180,220,255,.3), transparent),
+      radial-gradient(1px 1px at 74% 86%, rgba(180,220,255,.36), transparent);
+    opacity:.6;
+  }
+
+  /* ===== 四角板块按钮（2×2 拼图拼接，上下左右留白，白色边框点缀） ===== */
+  .sector {
+    position:fixed; width:calc(50vw - 47px); height:calc(50vh - 79px);
+    border-radius:14px;
+    border:2px solid rgba(255,255,255,.75);
+    cursor:pointer; padding:0; overflow:hidden;
+    background-size:cover; background-position:center;
+    font-family:inherit;   /* 覆盖 button 默认字体，继承网站统一手写体 */
+    z-index:2;
+    transition:transform .75s cubic-bezier(.22,.72,.28,1),
+               box-shadow .5s ease, border-color .5s ease;
+  }
+  /* 高斯模糊遮罩：默认盖在图片上（外扩6px彻底覆盖边缘，模糊加强） */
+  .sector::before {
+    content:""; position:absolute; inset:-6px; z-index:1;
+    background:rgba(6,10,20,.45);
+    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    transition:opacity .55s ease, background .55s ease;
+  }
+  /* 板块标题文字：仅文字区域为触发热区（鼠标放在字体上才触发动画） */
+  .sector .sector-title {
+    position:absolute; left:50%; top:50%;
+    transform:translate(-50%,-50%);
+    padding:10px 24px; border-radius:12px;
+    font-size:46px; font-weight:700; letter-spacing:6px;
+    text-shadow:0 2px 12px rgba(0,0,0,.75);
+    cursor:pointer; user-select:none;
+    transition:opacity .45s ease;
+    z-index:2;
+  }
+  /* 悬停（鼠标接触板块）：高斯模糊消失 + 标题同步消失，只留清晰图片 */
+  .sector:hover {
+    border-color:rgba(255,255,255,.45);
+    box-shadow:0 18px 56px rgba(0,0,0,.6), 0 0 34px rgba(122,178,255,.14);
+  }
+  .sector:hover::before {
+    opacity:0;
+    background:rgba(6,10,20,0);
+  }
+  .sector:hover .sector-title {
+    opacity:0;
+    transform:translate(-50%,-50%) scale(1.06);
+  }
+
+  /* 点击跳转动画：图片放大并移动到屏幕中央，随后跳转 */
+  .sector.zoom {
+    z-index:100;
+    border-radius:0;
+    border-color:rgba(255,255,255,.55);
+    box-shadow:0 0 120px rgba(0,0,0,.9);
+    transition:transform .8s cubic-bezier(.5,0,.2,1), border-radius .8s ease, box-shadow .8s ease;
+  }
+  .sector.zoom::before {
+    opacity:0;
+    background:rgba(6,10,20,0);
+  }
+  .sector.s1.zoom { transform:translate(calc(50vw - 50% - 44px), calc(50vh - 50% - 76px)) scale(2.6); }
+  .sector.s2.zoom { transform:translate(calc(-50% - 3px), calc(50vh - 50% - 76px)) scale(2.6); }
+  .sector.s3.zoom { transform:translate(calc(50vw - 50% - 44px), calc(-50% - 3px)) scale(2.6); }
+  .sector.s4.zoom { transform:translate(calc(-50% - 3px), calc(-50% - 3px)) scale(2.6); }
+
+  /* 拼图定位：上下留白76px，左右留边44px（露出视频背景），中间6px缝隙 */
+  .sector.s1 { left:44px;     top:76px; background-image:url(/static/sector1.jpg); color:#4aa8ff; }
+  .sector.s2 { left:calc(50vw + 3px); top:76px; background-image:url(/static/sector2.png); color:#ffb3c7; }
+  .sector.s3 { left:44px;     top:calc(50vh + 3px); background-image:url(/static/sector3.jpg); color:#ffa94d; }
+  .sector.s4 { left:calc(50vw + 3px); top:calc(50vh + 3px); background-image:url(/static/sector4.jpg); color:#ffffff; }
+
+  /* ===== 大厅音乐播放器：Небо (天空) 专辑封面 + 歌词条 ===== */
+  .player-box {
+    position:fixed; left:16px; bottom:12px; z-index:40;
+    display:flex; align-items:center; gap:10px;
+  }
+  .music-btn {
+    width:44px; height:44px; border-radius:50%;
+    border:2px solid rgba(255,255,255,.35);
+    cursor:pointer; padding:0;
+    box-shadow:0 6px 20px rgba(0,0,0,.5), 0 0 18px rgba(122,178,255,.15);
+    transition:border-color .3s, box-shadow .3s;
+    overflow:hidden;
+  }
+  /* 专辑封面：圆形裁剪填满按钮 */
+  .music-btn .cover {
+    display:block; width:100%; height:100%;
+    object-fit:cover; border-radius:50%;
+  }
+  /* 播放时封面旋转（黑胶滚动动画） */
+  .music-btn.playing .cover { animation:vinylSpin 9s linear infinite; }
+  @keyframes vinylSpin { from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+  .music-btn::after {
+    content:""; position:absolute; left:50%; top:50%;
+    width:10px; height:10px; border-radius:50%;
+    background:rgba(0,0,0,.55);
+    border:2px solid rgba(255,255,255,.6);
+    transform:translate(-50%,-50%);
+    pointer-events:none;
+  }
+  .music-btn:hover { border-color:rgba(122,178,255,.8); box-shadow:0 8px 26px rgba(0,0,0,.55), 0 0 26px rgba(122,178,255,.35); }
+  .music-btn.playing { border-color:rgba(122,178,255,.7); box-shadow:0 8px 26px rgba(0,0,0,.55), 0 0 30px rgba(122,178,255,.4); }
+
+  /* 歌词条：位于播放器右侧，高度与播放器持平 */
+  .lyric-bar {
+    height:44px; width:300px; max-width:34vw;
+    background:rgba(10,12,20,.55);
+    border:1px solid rgba(255,255,255,.2); border-radius:12px;
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    display:flex; align-items:center; justify-content:center;
+    padding:0 14px; overflow:hidden;
+    box-shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+  .l-text { text-align:center; width:100%; }
+  .l-en {
+    font-size:13.5px; color:#eef3ff; line-height:1.3;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    text-shadow:0 0 10px rgba(122,178,255,.4);
+  }
+  .l-cn {
+    font-size:11px; color:#9fb0d0; line-height:1.25;
+    font-family:'FZShuTi','方正舒体','KaiTi','楷体','Microsoft YaHei',sans-serif;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  /* 歌词切换淡入 */
+  .lyric-bar.fade { animation:lyricIn .45s ease; }
+  @keyframes lyricIn {
+    from { opacity:.2; transform:translateY(5px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
+  /* ===== 加载画面：登录后进入时显示 ===== */
+  .loader {
+    position:fixed; inset:0; z-index:200;
+    background:#000;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:26px;
+    transition:opacity .55s ease, visibility .55s;
+  }
+  .loader.hide { opacity:0; visibility:hidden; pointer-events:none; }
+  .loader-title {
+    font-size:44px; font-weight:700; letter-spacing:8px;
+    color:#eef3ff;
+    text-shadow:0 0 18px rgba(122,178,255,.8), 0 0 46px rgba(122,178,255,.35);
+    animation:loaderPulse 1.6s ease-in-out infinite;
+  }
+  .loader-sub {
+    font-size:15px; letter-spacing:4px; color:#7f93bd;
+    font-family:'FZShuTi','方正舒体','KaiTi','楷体',cursive;
+  }
+  .loader-ring {
+    width:44px; height:44px; border-radius:50%;
+    border:3px solid rgba(122,178,255,.18);
+    border-top-color:#7ab2ff;
+    animation:loaderSpin 1s linear infinite;
+  }
+  @keyframes loaderSpin { to { transform:rotate(360deg); } }
+  @keyframes loaderPulse {
+    0%,100% { opacity:1; }
+    50%     { opacity:.55; }
+  }
+
+  /* ===== 扑克牌发牌动画：板块从中央牌堆依次飞向四角 ===== */
+  .sector.deal1 { animation:deal1 .8s cubic-bezier(.25,.8,.3,1) forwards; }
+  .sector.deal2 { animation:deal2 .8s cubic-bezier(.25,.8,.3,1) forwards; }
+  .sector.deal3 { animation:deal3 .8s cubic-bezier(.25,.8,.3,1) forwards; }
+  .sector.deal4 { animation:deal4 .8s cubic-bezier(.25,.8,.3,1) forwards; }
+  @keyframes deal1 {
+    from { transform:translate(calc(50vw - 50% - 44px), calc(50vh - 50% - 76px)) rotate(-8deg) scale(.86); opacity:0; }
+    to   { transform:translate(0,0) rotate(0deg) scale(1); opacity:1; }
+  }
+  @keyframes deal2 {
+    from { transform:translate(calc(-50% - 3px), calc(50vh - 50% - 76px)) rotate(8deg) scale(.86); opacity:0; }
+    to   { transform:translate(0,0) rotate(0deg) scale(1); opacity:1; }
+  }
+  @keyframes deal3 {
+    from { transform:translate(calc(50vw - 50% - 44px), calc(-50% - 3px)) rotate(-5deg) scale(.86); opacity:0; }
+    to   { transform:translate(0,0) rotate(0deg) scale(1); opacity:1; }
+  }
+  @keyframes deal4 {
+    from { transform:translate(calc(-50% - 3px), calc(-50% - 3px)) rotate(5deg) scale(.86); opacity:0; }
+    to   { transform:translate(0,0) rotate(0deg) scale(1); opacity:1; }
+  }
+</style>
+</head>
+<body>
+  <div class="loader" id="loader">
+    <div class="loader-title">BURN MEMORY</div>
+    <div class="loader-sub">私 人 记 忆 空 间</div>
+    <div class="loader-ring"></div>
+  </div>
+
+  <video id="bgVideo" class="bg-video" src="/static/bg-video-1080.mp4" autoplay muted loop playsinline preload="auto"></video>
+  <div class="dream-quote">Love all, Trust a few, Do wrong to none</div>
+  <audio id="bgm" loop preload="auto"></audio>
+
+  <div class="player-box">
+    <button id="musicBtn" class="music-btn" title="播放/暂停音乐"><img class="cover" src="/static/nebo-cover.jpg" alt="Небо (天空)"></button>
+    <div class="lyric-bar" id="lyricBar">
+      <div class="l-text">
+        <div class="l-en" id="lEn">SadSvit - Небо</div>
+        <div class="l-cn" id="lCn">天空</div>
+      </div>
+    </div>
+  </div>
+
+  <button class="sector s1" data-sec="1"><span class="sector-title">DREAM</span></button>
+  <button class="sector s2" data-sec="2"><span class="sector-title">LOVE</span></button>
+  <button class="sector s3" data-sec="3"><span class="sector-title">MEMORY</span></button>
+  <button class="sector s4" data-sec="4"><span class="sector-title">FUTURE</span></button>
+
+
+<script>
+/* 大厅 BGM：固定播放 SadSvit - Небо (天空) + 歌词条同步（误触重播已修复） */
+(function(){
+  var bgm = document.getElementById('bgm');
+  var btn = document.getElementById('musicBtn');
+  if (!bgm || !btn) return;
+  bgm.src = '/static/bgm1.mp3';   // SadSvit - Небо (天空)
+  bgm.volume = 0.10;
+
+  var played = false;
+  function start(){
+    var p = bgm.play();
+    if (p && p.then) p.then(function(){ played = true; btn.classList.add('playing'); removeUnlock(); }).catch(function(){});
+    else { played = true; btn.classList.add('playing'); removeUnlock(); }
+  }
+  function stop(){ bgm.pause(); btn.classList.remove('playing'); }
+  function unlock(){ if (!played && bgm.paused){ start(); } }
+  function removeUnlock(){
+    ['pointerdown','keydown','touchstart','click'].forEach(function(ev){ document.removeEventListener(ev, unlock); });
+  }
+  ['pointerdown','keydown','touchstart','click'].forEach(function(ev){ document.addEventListener(ev, unlock); });
+  start();
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    if (bgm.paused){ start(); } else { stop(); }
+  });
+})();
+
+/* 大厅歌词条：解析 nebo.lrc（乌语+中文），播放时同步切换当前行 */
+(function(){
+  var bgm = document.getElementById('bgm');
+  var bar = document.getElementById('lyricBar');
+  var lEn = document.getElementById('lEn');
+  var lCn = document.getElementById('lCn');
+  if (!bgm || !bar || !lEn || !lCn) return;
+
+  var items = [];
+  var cur = null;
+
+  function parseLrc(text){
+    text.split('\n').forEach(function(line){
+      var m = line.match(/\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)/);
+      if (!m) return;
+      var t = parseInt(m[1],10)*60 + parseFloat(m[2]);
+      var content = (m[3]||'').trim();
+      if (!content) return;
+      if (/作词|作曲|编曲|制作人/.test(content) && !/[A-Za-zА-Яа-яЁёІіЇїЄє]/.test(content.replace(/作词|作曲|编曲|制作人.*$/,''))) return;
+      if (/^SadSvit\s*-/.test(content)) return;
+      var cnIdx = content.search(/[\u4e00-\u9fff]/);
+      var en = cnIdx === -1 ? content : content.slice(0, cnIdx).trim();
+      var cn = cnIdx === -1 ? '' : content.slice(cnIdx).trim();
+      if (en) items.push({t:t, en:en, cn:cn});
+    });
+    items.sort(function(a,b){ return a.t - b.t; });
+  }
+
+  function update(){
+    if (!items.length) return;
+    var t = bgm.currentTime;
+    var idx = 0;
+    for (var i = 0; i < items.length; i++){
+      if (items[i].t <= t) idx = i;
+    }
+    var it = items[idx];
+    if (it !== cur){
+      cur = it;
+      lEn.textContent = it.en;
+      lCn.textContent = it.cn || '';
+      bar.classList.remove('fade');
+      void bar.offsetWidth;
+      bar.classList.add('fade');
+    }
+  }
+
+  fetch('/static/nebo.lrc')
+    .then(function(r){ return r.text(); })
+    .then(function(text){
+      parseLrc(text);
+      update();
+      bgm.addEventListener('timeupdate', update);
+    })
+    .catch(function(){ /* 加载失败静默 */ });
+})();
+
+/* 加载画面 + 扑克牌发牌：登录后进入页面 → 加载画面显示 → 四板块从中央牌堆依次飞向四角 */
+(function(){
+  var loader = document.getElementById('loader');
+  var secs = document.querySelectorAll('.sector');
+  if (loader && secs.length){
+    // 加载画面 0.75s 后淡出，同时开始发牌
+    setTimeout(function(){ loader.classList.add('hide'); }, 750);
+    secs.forEach(function(s, i){
+      setTimeout(function(){
+        s.classList.add('deal' + (i + 1));
+        // 动画结束后移除 deal 类，避免影响 hover/zoom 的 transform
+        s.addEventListener('animationend', function(){
+          s.classList.remove('deal' + (i + 1));
+        }, { once:true });
+      }, 180 + i * 220);
+    });
+  } else if (loader){
+    setTimeout(function(){ loader.classList.add('hide'); }, 750);
+  }
+})();
+
+/* 板块交互：鼠标接触板块 → 去模糊高亮（CSS hover）；点击 → 居中放大动画后跳转 */
+(function(){
+  document.querySelectorAll('.sector').forEach(function(sec){
+    var secNo = sec.getAttribute('data-sec') || '1';
+    // 点击整个板块：播放居中放大动画，动画结束后跳转到对应上传界面
+    sec.addEventListener('click', function(e){
+      if (e.target.closest('.music-btn')) return;
+      sec.classList.add('zoom');
+      setTimeout(function(){
+        location.href = '/sector/' + secNo;
+      }, 850);
+    });
+  });
+})();
+
+/* 背景视频循环兜底：loop 属性失效时手动重播（防卡住） */
+(function(){
+  var bgv = document.getElementById('bgVideo');
+  if (!bgv) return;
+  bgv.addEventListener('ended', function(){
+    try { bgv.currentTime = 0; } catch(e){}
+    bgv.play().catch(function(){});
+  });
+  // 解码卡顿自动恢复
+  bgv.addEventListener('stalled', function(){
+    bgv.play().catch(function(){});
+  });
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sector {{ n }} · Burn Memory</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'Ink Free', 'Segoe Script', 'Brush Script MT', 'Lucida Handwriting',
+                 'FZShuTi', '方正舒体', 'KaiTi', '楷体', cursive;
+    background:#000; color:#e6e9f2; min-height:100vh; position:relative;
+  }
+  /* 板块底图：全屏清晰显示（跳转动画放大后的延续） */
+  .bg {
+    position:fixed; inset:0; z-index:0;
+    background:url('/static/sector{{ n }}{% if n == 2 %}.png{% else %}.jpg{% endif %}') center/cover no-repeat;
+    filter:brightness(.55) saturate(1.05);
+  }
+  .bg::after {  /* 底部渐暗便于阅读 */
+    content:""; position:absolute; inset:0;
+    background:linear-gradient(180deg, rgba(0,0,0,.25) 0%, rgba(0,0,0,.15) 40%, rgba(0,0,0,.72) 100%);
+  }
+
+  .top {
+    position:fixed; top:0; left:0; right:0; z-index:20;
+    display:flex; align-items:center; gap:16px;
+    padding:16px 26px;
+    background:linear-gradient(180deg, rgba(0,0,0,.55), transparent);
+  }
+  .back {
+    width:42px; height:42px; border-radius:50%;
+    border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.12);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    color:#fff; font-size:18px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .25s, border-color .25s;
+    font-family:inherit; text-decoration:none;
+  }
+  .back:hover { background:rgba(59,130,246,.45); border-color:rgba(122,178,255,.7); }
+  .sector-name {
+    font-size:30px; letter-spacing:5px; color:#fff;
+    text-shadow:0 2px 16px rgba(0,0,0,.8), 0 0 24px rgba(122,178,255,.4);
+  }
+  .sector-name small { font-size:12px; letter-spacing:3px; color:#a8b8d8; display:block; }
+
+  .main { position:relative; z-index:10; padding:110px 28px 120px; }
+
+  /* 上传卡片：毛玻璃 */
+  .upload-zone {
+    max-width:560px; margin:0 auto 26px; padding:34px 24px;
+    border:2px dashed rgba(255,255,255,.45); border-radius:18px;
+    text-align:center; cursor:pointer; transition:all .25s;
+    background:rgba(255,255,255,.14);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    color:#eef3ff;
+  }
+  .upload-zone:hover, .upload-zone.drag {
+    border-color:#7ab2ff; background:rgba(59,130,246,.22);
+    box-shadow:0 0 34px rgba(59,130,246,.25);
+  }
+  .upload-zone .big { font-size:22px; margin-bottom:6px; }
+  .upload-zone .tip { font-size:13px; color:#c3d0e8; }
+  input[type=file] { display:none; }
+  .progress-bar {
+    display:none; height:6px; border-radius:3px; background:rgba(255,255,255,.18);
+    margin:0 auto 8px; max-width:560px; overflow:hidden;
+  }
+  .progress-bar .fill { height:100%; width:0%; background:linear-gradient(90deg,#4f8ef7,#7ab2ff); transition:width .2s; }
+  .progress-text { text-align:center; font-size:13px; color:#c3d0e8; min-height:18px; margin-bottom:14px; }
+
+  /* 文件网格 */
+  .grid {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+    gap:14px; max-width:1100px; margin:0 auto;
+  }
+  .card {
+    background:rgba(10,12,20,.55); border:1px solid rgba(255,255,255,.2); border-radius:14px;
+    overflow:hidden; position:relative;
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    transition:transform .2s, border-color .2s, box-shadow .2s;
+  }
+  .card:hover { transform:translateY(-3px); border-color:rgba(122,178,255,.55); box-shadow:0 10px 30px rgba(0,0,0,.5); }
+  .thumb { width:100%; aspect-ratio:16/10; object-fit:cover; background:#000; display:block; cursor:zoom-in; }
+  .video-holder { position:relative; width:100%; aspect-ratio:16/10; background:#000; }
+  .video-holder video { width:100%; height:100%; object-fit:contain; }
+  .play-badge {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.35); cursor:pointer; transition:background .2s; border:none; color:#fff;
+  }
+  .play-badge:hover { background:rgba(0,0,0,.55); }
+  .meta { padding:9px 12px 11px; }
+  .name { font-size:13px; word-break:break-all; margin-bottom:4px; color:#e8edf8; }
+  .info { font-size:11px; color:#9fb0d0; display:flex; justify-content:space-between; align-items:center; }
+  .del { color:#9fb0d0; background:none; border:none; cursor:pointer; font-size:12px; padding:2px 6px; border-radius:6px; font-family:inherit; }
+  .del:hover { color:#ff6b6b; background:rgba(255,80,80,.12); }
+  .empty { text-align:center; color:#b8c6e2; padding:50px 0; font-size:17px; text-shadow:0 0 10px rgba(0,0,0,.8); }
+
+  /* Lightbox */
+  .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.93); display:none;
+    align-items:center; justify-content:center; z-index:100; cursor:zoom-out; }
+  .lightbox img { max-width:92vw; max-height:92vh; border-radius:10px; }
+  .lightbox video { max-width:92vw; max-height:92vh; border-radius:10px; }
+  .lightbox .close { position:absolute; top:20px; right:28px; font-size:32px; color:#fff; cursor:pointer; }
+
+  .toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+    background:rgba(15,18,32,.9); border:1px solid rgba(122,178,255,.4); color:#e6e9f2;
+    padding:11px 24px; border-radius:12px; font-size:14px; opacity:0;
+    transition:opacity .25s; pointer-events:none; z-index:200; }
+  .toast.show { opacity:1; }
+  .toast.err { border-color:rgba(255,107,107,.6); color:#ffb3b3; }
+
+  /* 音乐播放器（底部左下） */
+  .player-box { position:fixed; left:16px; bottom:12px; z-index:40; display:flex; align-items:center; gap:10px; }
+  .music-btn {
+    width:44px; height:44px; border-radius:50%;
+    border:2px solid rgba(255,255,255,.4); cursor:pointer; padding:0;
+    background:radial-gradient(circle at 32% 30%, #1c3a6b 0%, #0b1428 72%);
+    color:#dfe9ff; font-size:19px; font-family:inherit;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 6px 20px rgba(0,0,0,.5);
+    transition:border-color .3s;
+    overflow:hidden;
+  }
+  .music-btn.playing { animation:vinylSpin 9s linear infinite; }
+  @keyframes vinylSpin { from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+  .music-btn::after {
+    content:""; position:absolute; left:50%; top:50%;
+    width:10px; height:10px; border-radius:50%;
+    background:rgba(0,0,0,.55); border:2px solid rgba(255,255,255,.6);
+    transform:translate(-50%,-50%); pointer-events:none;
+  }
+
+  /* 歌词条：位于播放器右侧，高度与播放器持平 */
+  .lyric-bar {
+    height:44px; width:300px; max-width:34vw;
+    background:rgba(10,12,20,.55);
+    border:1px solid rgba(255,255,255,.2); border-radius:12px;
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    display:flex; align-items:center; justify-content:center;
+    padding:0 14px; overflow:hidden;
+    box-shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+  .l-text { text-align:center; width:100%; }
+  .l-en {
+    font-size:13.5px; color:#eef3ff; line-height:1.3;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    text-shadow:0 0 10px rgba(122,178,255,.4);
+  }
+  .l-cn {
+    font-size:11px; color:#9fb0d0; line-height:1.25;
+    font-family:'FZShuTi','方正舒体','KaiTi','楷体','Microsoft YaHei',sans-serif;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .lyric-bar.fade { animation:lyricIn .45s ease; }
+  @keyframes lyricIn {
+    from { opacity:.2; transform:translateY(5px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+</style>
+</head>
+<body>
+  <div class="bg"></div>
+
+  <div class="top">
+    <a class="back" href="/" title="返回首页">←</a>
+    <div class="sector-name">SECTOR {{ n }}<small>PRIVATE UPLOAD SPACE</small></div>
+  </div>
+
+  <div class="main">
+    <div class="upload-zone" id="zone">
+      <div class="big">📁 点击选择 或 拖拽文件到这里上传</div>
+      <div class="tip">支持图片（PNG/JPG/GIF/WebP…）与视频（MP4/WebM/MOV…），单文件上限 2GB，可多选</div>
+      <input type="file" id="file" multiple>
+    </div>
+    <div class="progress-bar" id="bar"><div class="fill" id="fill"></div></div>
+    <div class="progress-text" id="ptext"></div>
+
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <audio id="bgm" loop preload="auto"></audio>
+  <div class="player-box">
+    <button id="musicBtn" class="music-btn" title="播放/暂停音乐">♪</button>
+    <div class="lyric-bar" id="lyricBar">
+      <div class="l-text">
+        <div class="l-en" id="lEn">Loading...</div>
+        <div class="l-cn" id="lCn">SECTOR {{ n }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lightbox" id="lightbox"><span class="close">✕</span></div>
+  <div class="toast" id="toast"></div>
+
+<script>
+var SEC = {{ n }};
+var SEC_BASE = '?sec=' + SEC;
+
+const grid = document.getElementById('grid');
+const fileInput = document.getElementById('file');
+const zone = document.getElementById('zone');
+let items = [];
+
+function fmtSize(n){
+  const u = ['B','KB','MB','GB','TB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length-1){ n /= 1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + ' ' + u[i];
+}
+function esc(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function load(){
+  const r = await fetch('/api/media' + SEC_BASE);
+  const j = await r.json();
+  items = j.items || [];
+  render();
+}
+function render(){
+  grid.innerHTML = '';
+  if (!items.length){
+    grid.innerHTML = '<div class="empty">这个板块还是空的，上传图片或视频吧 ✨</div>';
+    return;
+  }
+  for (const it of items){
+    const url = '/media/' + encodeURIComponent(it.name) + SEC_BASE;
+    const card = document.createElement('div');
+    card.className = 'card';
+    const d = new Date(it.mtime*1000);
+    const date = d.toLocaleDateString('zh-CN') + ' ' + d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+    if (it.kind === 'image'){
+      card.innerHTML = `
+        <img class="thumb" src="${url}" alt="${esc(it.name)}" loading="lazy">
+        <div class="meta"><div class="name">${esc(it.name)}</div>
+        <div class="info"><span>${fmtSize(it.size)} · ${date}</span>
+        <button class="del" data-name="${esc(it.name)}">删除</button></div></div>`;
+      card.querySelector('.thumb').onclick = () => openLightbox('image', url, it.name);
+    } else {
+      card.innerHTML = `
+        <div class="video-holder">
+          <video preload="metadata" muted playsinline src="${url}"></video>
+          <button class="play-badge"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+        </div>
+        <div class="meta"><div class="name">${esc(it.name)}</div>
+        <div class="info"><span>${fmtSize(it.size)} · ${date}</span>
+        <button class="del" data-name="${esc(it.name)}">删除</button></div></div>`;
+      const v = card.querySelector('video');
+      card.querySelector('.play-badge').onclick = (e) => { e.stopPropagation(); openLightbox('video', url, it.name); };
+      const holder = card.querySelector('.video-holder');
+      holder.addEventListener('mouseenter', () => { v.muted = true; v.play().catch(()=>{}); });
+      holder.addEventListener('mouseleave', () => { v.pause(); v.currentTime = 0; });
+    }
+    grid.appendChild(card);
+  }
+  document.querySelectorAll('.del').forEach(b => b.onclick = () => del(b.dataset.name));
+}
+
+async function del(name){
+  if (!confirm(`确定删除「${name}」？此操作不可恢复。`)) return;
+  const r = await fetch('/api/delete' + SEC_BASE, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name}) });
+  const j = await r.json();
+  if (j.ok){ toast('已删除'); load(); } else { toast('删除失败: ' + (j.error||''), true); }
+}
+
+const lb = document.getElementById('lightbox');
+function openLightbox(kind, url, name){
+  lb.innerHTML = '<span class="close">✕</span>' + (kind==='image'
+    ? `<img src="${url}" alt="${esc(name)}">` : `<video src="${url}" controls autoplay></video>`);
+  lb.style.display = 'flex';
+  lb.querySelector('.close').onclick = closeLightbox;
+}
+function closeLightbox(){ lb.style.display = 'none'; lb.innerHTML = '<span class="close">✕</span>'; }
+lb.addEventListener('click', e => { if (e.target === lb) closeLightbox(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+function toast(msg, err){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* 上传（到本板块独立目录） */
+zone.onclick = () => fileInput.click();
+['dragenter','dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('drag'); }));
+zone.addEventListener('drop', e => { if (e.dataTransfer.files.length) upload(e.dataTransfer.files); });
+fileInput.onchange = () => { if (fileInput.files.length) upload(fileInput.files); };
+
+async function upload(files){
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  const bar = document.getElementById('bar'), fill = document.getElementById('fill'), pt = document.getElementById('ptext');
+  bar.style.display = 'block';
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload' + SEC_BASE);
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable){ const p = e.loaded/e.total*100; fill.style.width = p + '%'; pt.textContent = `上传中… ${p.toFixed(0)}%`; }
+  };
+  xhr.onload = () => {
+    bar.style.display = 'none'; fill.style.width = '0%'; pt.textContent = '';
+    try {
+      const j = JSON.parse(xhr.responseText);
+      if (j.ok){
+        let msg = `已上传 ${j.uploaded.length} 个文件`;
+        if (j.errors && j.errors.length) msg += '，' + j.errors.length + ' 个失败';
+        toast(msg, j.errors && j.errors.length);
+        fileInput.value = '';
+        load();
+      } else toast('上传失败: ' + (j.error||''), true);
+    } catch { toast('上传失败（响应异常）', true); }
+  };
+  xhr.onerror = () => { bar.style.display='none'; pt.textContent=''; toast('网络错误，上传失败', true); };
+  xhr.send(fd);
+}
+
+/* BGM：每个板块播放专属歌曲（按上传顺序分配） */
+(function(){
+  var bgm = document.getElementById('bgm');
+  var btn = document.getElementById('musicBtn');
+  var lEn = document.getElementById('lEn');
+  var lCn = document.getElementById('lCn');
+  if (!bgm || !btn) return;
+
+  var SONGS = {
+    1: { src:'/static/bgm-s1.mp3', title:'Imagine Dragons - Thunder' },
+    2: { src:'/static/bgm-s2.mp3', title:'Avicii - Waiting for Love' },
+    3: { src:'/static/bgm-s3.mp3', title:'Imagine Dragons - The Fall' },
+    4: { src:'/static/bgm-s4.mp3', title:'Avicii - The Nights' }
+  };
+  var info = SONGS[SEC] || SONGS[1];
+  bgm.src = info.src;
+  bgm.volume = 0.10;
+  if (lEn) lEn.textContent = info.title;
+  if (lCn) lCn.textContent = 'SECTOR ' + SEC;
+
+  var played = false;
+  function start(){
+    var p = bgm.play();
+    if (p && p.then) p.then(function(){ played = true; btn.classList.add('playing'); removeUnlock(); }).catch(function(){});
+    else { played = true; btn.classList.add('playing'); removeUnlock(); }
+  }
+  function stop(){ bgm.pause(); btn.classList.remove('playing'); }
+  function unlock(){ if (!played && bgm.paused){ start(); } }
+  function removeUnlock(){
+    ['pointerdown','keydown','touchstart','click'].forEach(function(ev){ document.removeEventListener(ev, unlock); });
+  }
+  ['pointerdown','keydown','touchstart','click'].forEach(function(ev){ document.addEventListener(ev, unlock); });
+  start();
+  btn.addEventListener('click', function(e){ e.stopPropagation(); if (bgm.paused){ start(); } else { stop(); } });
+})();
+
+/* 板块歌词：英中对照同步（DREAM→Thunder，LOVE→Waiting for Love，MEMORY→The Fall，FUTURE→The Nights） */
+(function(){
+  var LRC_MAP = {
+    1: '/static/thunder.lrc',
+    2: '/static/waiting.lrc',
+    3: '/static/fall.lrc',
+    4: '/static/nights.lrc'
+  };
+  var lrcFile = LRC_MAP[SEC];
+  if (!lrcFile) return;
+  var bgm = document.getElementById('bgm');
+  var bar = document.getElementById('lyricBar');
+  var lEn = document.getElementById('lEn');
+  var lCn = document.getElementById('lCn');
+  if (!bgm || !bar || !lEn || !lCn) return;
+
+  var items = [];
+  var cur = null;
+  var TITLES = { 1: 'Imagine Dragons - Thunder', 2: 'Avicii - Waiting for Love', 3: 'Imagine Dragons - The Fall', 4: 'Avicii - The Nights' };
+  // 歌词时间轴校准：LOVE 版 MP3 人声实际在 ~6.5s 进入，而 LRC 标注 14.39s → 整体提前 8 秒
+  var OFFSET = (SEC === 2) ? -8 : 0;
+
+  function parseLrc(text){
+    text.split('\n').forEach(function(line){
+      var m = line.match(/\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)/);
+      if (!m) return;
+      var t = parseInt(m[1],10)*60 + parseFloat(m[2]);
+      var content = (m[3]||'').trim();
+      if (!content) return;
+      if (/作词|作曲|编曲|制作人/.test(content) && !/[A-Za-z]/.test(content.replace(/作词|作曲|编曲|制作人.*$/,''))) return;
+      var cnIdx = content.search(/[\u4e00-\u9fff]/);
+      var en = cnIdx === -1 ? content : content.slice(0, cnIdx).trim();
+      var cn = cnIdx === -1 ? '' : content.slice(cnIdx).trim();
+      if (en) items.push({t:t, en:en, cn:cn});
+    });
+    items.sort(function(a,b){ return a.t - b.t; });
+  }
+
+  function update(){
+    if (!items.length) return;
+    // 校准：OFFSET=-8 表示实际演唱比 LRC 标注提前 8 秒 → 用 currentTime - OFFSET 查找
+    var t = bgm.currentTime - OFFSET;
+    var first = items[0];
+    var last = items[items.length - 1];
+    // 前奏期（还没到第一句歌词）：显示歌名，不显示歌词
+    if (t < first.t - 0.5){
+      if (cur !== null){
+        cur = null;
+        lEn.textContent = TITLES[SEC] || ('SECTOR ' + SEC);
+        lCn.textContent = 'SECTOR ' + SEC;
+        bar.classList.remove('fade');
+        void bar.offsetWidth;
+        bar.classList.add('fade');
+      }
+      return;
+    }
+    // 超过最后一句歌词 3 秒后恢复显示歌名（防止歌词条卡在最后一句不动）
+    if (t > last.t + 3){
+      if (cur !== null){
+        cur = null;
+        lEn.textContent = TITLES[SEC] || ('SECTOR ' + SEC);
+        lCn.textContent = 'SECTOR ' + SEC;
+        bar.classList.remove('fade');
+        void bar.offsetWidth;
+        bar.classList.add('fade');
+      }
+      return;
+    }
+    var idx = 0;
+    for (var i = 0; i < items.length; i++){
+      if (items[i].t <= t) idx = i;
+    }
+    var it = items[idx];
+    if (it !== cur){
+      cur = it;
+      lEn.textContent = it.en;
+      lCn.textContent = it.cn || '';
+      bar.classList.remove('fade');
+      void bar.offsetWidth;
+      bar.classList.add('fade');
+    }
+  }
+
+  fetch(lrcFile)
+    .then(function(r){ return r.text(); })
+    .then(function(text){
+      parseLrc(text);
+      update();
+      bgm.addEventListener('timeupdate', update);
+    })
+    .catch(function(){ /* 加载失败静默 */ });
+})();
+
+
+load();
+</script>
+</body>
+</html>
