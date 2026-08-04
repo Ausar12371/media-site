@@ -45,74 +45,14 @@
     text-shadow:0 2px 16px rgba(0,0,0,.8), 0 0 24px rgba(122,178,255,.4);
   }
   .sector-name small { font-size:12px; letter-spacing:3px; color:#a8b8d8; display:block; }
+  /* 梦：微软默认字体加粗大标题 */
+  .dream-name {
+    font-family:'Microsoft YaHei UI','Microsoft YaHei','微软雅黑',sans-serif;
+    font-weight:700; font-size:44px; letter-spacing:8px;
+  }
 
   .main { position:relative; z-index:10; padding:110px 28px 120px; }
 
-  /* DREAM 四板块：叠加卡组（屏幕居中，点击切换） */
-  .d-stack {
-    position:fixed; left:50%; top:50%;
-    transform:translate(-50%,-50%);
-    width:min(960px, 86vw); height:min(660px, 74vh);
-  }
-  .d-card {
-    position:absolute; inset:0;
-    border-radius:14px;
-    border:2px solid rgba(255,255,255,.75);
-    background:linear-gradient(145deg, rgba(26,38,66,.92), rgba(8,12,24,.92));
-    overflow:hidden; cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-    opacity:0; visibility:hidden; transform:scale(.96);
-    transition:opacity .5s ease, transform .5s ease, visibility 0s linear .5s;
-  }
-  .d-card.active {
-    opacity:1; visibility:visible; transform:scale(1);
-    transition:opacity .5s ease, transform .5s ease;
-  }
-  .d-card:hover { border-color:rgba(255,255,255,.9); }
-  .d-title {
-    font-size:44px; letter-spacing:6px; color:#eef3ff;
-    text-shadow:0 0 16px rgba(122,178,255,.5);
-    user-select:none;
-  }
-  /* 扑克牌抛出动画：按当前卡编号飞出方向（1左上 2右上 3右下 4左下） */
-  .d-card.fly-out { animation:flyAway .6s cubic-bezier(.3,.7,.4,1) forwards; }
-  .d-card.fly-out.fly-1 { animation-name:fly1; }
-  .d-card.fly-out.fly-2 { animation-name:fly2; }
-  .d-card.fly-out.fly-3 { animation-name:fly3; }
-  .d-card.fly-out.fly-4 { animation-name:fly4; }
-  @keyframes fly1 { to { transform:translate(-78vw,-78vh) rotate(-42deg) scale(.4); opacity:0; } }
-  @keyframes fly2 { to { transform:translate(78vw,-78vh) rotate(42deg) scale(.4); opacity:0; } }
-  @keyframes fly3 { to { transform:translate(78vw,78vh) rotate(42deg) scale(.4); opacity:0; } }
-  @keyframes fly4 { to { transform:translate(-78vw,78vh) rotate(-42deg) scale(.4); opacity:0; } }
-
-  /* 左右切换箭头：常态隐藏，鼠标移到网页左右边缘时显现 */
-  .edge-left, .edge-right {
-    position:fixed; top:0; bottom:0; width:110px; z-index:30;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .edge-left { left:0; }
-  .edge-right { right:0; }
-  .arrow {
-    width:58px; height:58px; border-radius:50%;
-    border:1.5px solid rgba(122,178,255,.7);
-    background:rgba(10,16,30,.45);
-    color:#cfe0ff; font-size:30px; line-height:1;
-    display:flex; align-items:center; justify-content:center;
-    cursor:pointer; user-select:none;
-    opacity:0;
-    transform:translateY(6px) scale(.9);
-    transition:opacity .35s ease, transform .35s ease, background .3s ease, border-color .3s ease, box-shadow .3s ease;
-    pointer-events:none;
-  }
-  .edge-left:hover .arrow, .edge-right:hover .arrow {
-    opacity:1; transform:translateY(0) scale(1);
-    pointer-events:auto;
-  }
-  .arrow:hover {
-    background:rgba(122,178,255,.28);
-    border-color:rgba(150,195,255,.95);
-    box-shadow:0 0 22px rgba(122,178,255,.4);
-  }
 
   .d-block {
     position:relative; border-radius:14px;
@@ -257,22 +197,11 @@
   <div class="bg"></div>
 
   <div class="top">
-    <a class="back" href="/" title="返回首页">←</a>
-    <div class="sector-name">{% if n == 1 %}DREAM{% else %}SECTOR {{ n }}{% endif %}<small>{% if n == 1 %}像暮星，超越人类思想的极限{% else %}PRIVATE UPLOAD SPACE{% endif %}</small></div>
+    <a class="back" href="/sector/1" title="返回板块">←</a>
+    <div class="sector-name dream-name">梦</div>
   </div>
 
   <div class="main">
-    {% if n == 1 %}
-    <!-- DREAM 板块：叠加卡组（四张卡层叠，点击卡片进入内部，左右箭头切换） -->
-    <div class="d-stack" id="dStack">
-      <div class="d-card d1 active"><span class="d-title">01</span></div>
-      <div class="d-card d2"><span class="d-title">02</span></div>
-      <div class="d-card d3"><span class="d-title">03</span></div>
-      <div class="d-card d4"><span class="d-title">04</span></div>
-    </div>
-    <div class="edge-left" id="edgeL"><div class="arrow" id="arrowL" title="上一板块">‹</div></div>
-    <div class="edge-right" id="edgeR"><div class="arrow" id="arrowR" title="下一板块">›</div></div>
-    {% else %}
     <div class="upload-zone" id="zone">
       <div class="big">📁 点击选择 或 拖拽文件到这里上传</div>
       <div class="tip">支持图片（PNG/JPG/GIF/WebP…）与视频（MP4/WebM/MOV…），单文件上限 2GB，可多选</div>
@@ -282,7 +211,6 @@
     <div class="progress-text" id="ptext"></div>
 
     <div class="grid" id="grid"></div>
-    {% endif %}
   </div>
 
   <audio id="bgm" loop preload="auto"></audio>
@@ -395,33 +323,6 @@ if (zone && fileInput){
   fileInput.onchange = () => { if (fileInput.files.length) upload(fileInput.files); };
 }
 
-/* DREAM 叠加卡组：左右箭头切换板块（旧卡扑克牌飞出），点击卡片跳转内部页 */
-(function(){
-  if (SEC !== 1) return;
-  var cards = document.querySelectorAll('.d-card');
-  var arrowL = document.getElementById('arrowL');
-  var arrowR = document.getElementById('arrowR');
-  if (!cards.length) return;
-  var cur = 0, busy = false;
-  function show(i){
-    if (busy) return;
-    busy = true;
-    // 当前卡按编号旋转抛出：1左上 2右上 3右下 4左下
-    var outCard = cards[cur];
-    outCard.classList.add('fly-out', 'fly-' + (cur + 1));
-    setTimeout(function(){
-      outCard.classList.remove('active', 'fly-out', 'fly-' + (cur + 1));
-      cards[cur].classList.remove('active');
-      cur = (i + cards.length) % cards.length;
-      cards[cur].classList.add('active');
-      busy = false;
-    }, 600);
-  }
-  if (arrowL) arrowL.addEventListener('click', function(){ show(cur - 1); });
-  if (arrowR) arrowR.addEventListener('click', function(){ show(cur + 1); });
-  // 点击卡片 → 跳转内部页（梦：上传空间）
-  cards.forEach(function(c){ c.addEventListener('click', function(){ location.href = '/sector/1/inner'; }); });
-})();
 
 async function upload(files){
   const fd = new FormData();

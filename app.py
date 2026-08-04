@@ -165,6 +165,14 @@ def sector(n):
     return render_template("sector.html", n=n)
 
 
+@app.route("/sector/<int:n>/inner")
+@login_required
+def sector_inner(n):
+    if n not in (1, 2, 3, 4):
+        abort(404)
+    return render_template("sector_inner.html", n=n)
+
+
 @app.route("/api/media")
 @login_required
 def api_media():
