@@ -114,31 +114,6 @@
     box-shadow:0 0 22px rgba(122,178,255,.4);
   }
 
-  .d-block {
-    position:relative; border-radius:14px;
-    border:2px solid rgba(255,255,255,.75);
-    background:linear-gradient(145deg, rgba(26,38,66,.92), rgba(8,12,24,.92));
-    overflow:hidden; cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-    transition:border-color .5s ease, box-shadow .5s ease;
-  }
-  /* 模糊遮罩（外扩6px防边缘露出） */
-  .d-block::before {
-    content:""; position:absolute; inset:-6px;
-    background:rgba(6,10,20,.35);
-    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    transition:opacity .55s ease;
-  }
-  .d-block:hover { border-color:rgba(255,255,255,.5); box-shadow:0 14px 44px rgba(0,0,0,.55), 0 0 26px rgba(122,178,255,.12); }
-  .d-block:hover::before { opacity:0; }
-  .d-title {
-    position:relative; z-index:2;
-    font-size:40px; letter-spacing:5px; color:#eef3ff;
-    text-shadow:0 0 16px rgba(122,178,255,.5);
-    transition:opacity .45s ease;
-    user-select:none;
-  }
-  .d-block:hover .d-title { opacity:0; }
 
   /* 上传卡片：毛玻璃 */
   .upload-zone {
@@ -435,6 +410,7 @@ async function upload(files){
   };
   xhr.onload = () => {
     bar.style.display = 'none'; fill.style.width = '0%'; pt.textContent = '';
+    if (xhr.status === 413){ toast('文件过大（单文件上限 2GB）', true); return; }
     try {
       const j = JSON.parse(xhr.responseText);
       if (j.ok){

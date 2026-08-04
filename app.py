@@ -7,6 +7,7 @@
 import os
 import uuid
 import json
+import hmac
 from functools import wraps
 
 from flask import (Flask, request, redirect, url_for, render_template,
@@ -67,7 +68,8 @@ def check_login(identifier, password):
     for acc in ACCOUNTS:
         user_match = acc.get("username", "").strip() == identifier
         email_match = acc.get("email", "").strip().lower() == identifier.lower()
-        if (user_match or email_match) and acc.get("password", "") == password:
+        pwd_ok = hmac.compare_digest(str(acc.get("password", "")), str(password))
+        if (user_match or email_match) and pwd_ok:
             return True
     return False
 
@@ -222,8 +224,11 @@ def api_delete():
     sec = request.args.get("sec")
     sec = int(sec) if sec in ("1", "2", "3", "4") else None
     base = sector_dir(sec) if sec else UPLOAD_DIR
-    name = request.json.get("name", "") if request.is_json else request.form.get("name", "")
-    name = os.path.basename(name)
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "")
+    name = os.path.basename(name or "")
+    if not name:
+        return jsonify({"ok": False, "error": "缺少文件名"}), 400
     p = os.path.join(base, name)
     if not os.path.isfile(p):
         return jsonify({"ok": False, "error": "文件不存在"}), 404
