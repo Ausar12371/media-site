@@ -347,19 +347,13 @@ async function upload(files){
   if (lEn) lEn.textContent = info.title;
   if (lCn) lCn.textContent = 'SECTOR ' + SEC;
 
-  var played = false;
   function start(){
     var p = bgm.play();
-    if (p && p.then) p.then(function(){ played = true; btn.classList.add('playing'); removeUnlock(); }).catch(function(){});
-    else { played = true; btn.classList.add('playing'); removeUnlock(); }
+    if (p && p.then) p.then(function(){ btn.classList.add('playing'); }).catch(function(){});
+    else { btn.classList.add('playing'); }
   }
   function stop(){ bgm.pause(); btn.classList.remove('playing'); }
-  function unlock(){ if (!played && bgm.paused){ start(); } }
-  function removeUnlock(){
-    ['pointerdown','keydown','touchstart','click'].forEach(function(ev){ document.removeEventListener(ev, unlock); });
-  }
-  ['pointerdown','keydown','touchstart','click'].forEach(function(ev){ document.addEventListener(ev, unlock); });
-  start();
+  // 进入页面不主动播放音乐：仅点击播放器按钮时才播放/暂停
   btn.addEventListener('click', function(e){ e.stopPropagation(); if (bgm.paused){ start(); } else { stop(); } });
 })();
 

@@ -5,13 +5,17 @@
 访问:  http://127.0.0.1:8899
 """
 import os
-import uuid
+import time
 import json
 import hmac
+import secrets
+import threading
 from functools import wraps
 
 from flask import (Flask, request, redirect, url_for, render_template,
-                   send_from_directory, session, flash, jsonify, abort)
+                   send_from_directory, session, flash, get_flashed_messages,
+                   jsonify, abort)
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = r"F:\media-site-uploads"
@@ -25,39 +29,92 @@ ALLOWED_EXTS = IMAGE_EXTS | VIDEO_EXTS
 MAX_FILE_MB = 2048  # 单文件最大 2GB
 
 
-def load_accounts():
-    """从 config.json 读取账号列表；不存在则生成默认配置。"""
-    defaults = {
-        "accounts": [
-            {
-                "username": "user",
-                "email": "user@example.com",
-                "password": "change-me"
-            }
-        ]
-    }
-    if not os.path.exists(CONFIG_PATH):
+def load_config():
+    """读取 config.json；缺失字段自动生成并写回。返回 (accounts, guest_token, secret_key)。"""
+    data = {}
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+    changed = False
+    accounts = data.get("accounts")
+    if not isinstance(accounts, list) or not accounts:
+        accounts = [{"username": "user", "email": "user@example.com", "password": "change-me"}]
+        data["accounts"] = accounts
+        changed = True
+    token = data.get("guest_token")
+    if not token or not isinstance(token, str):
+        token = secrets.token_urlsafe(16)
+        data["guest_token"] = token
+        changed = True
+    key = data.get("secret_key")
+    if not key or not isinstance(key, str) or len(key) < 16:
+        key = secrets.token_hex(32)
+        data["secret_key"] = key
+        changed = True
+    if changed:
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-                json.dump(defaults, f, ensure_ascii=False, indent=2)
+                json.dump(data, f, ensure_ascii=False, indent=2)
         except OSError:
             pass
-        return defaults["accounts"]
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        accounts = data.get("accounts", [])
-        if isinstance(accounts, list) and accounts:
-            return accounts
-    except (OSError, ValueError):
-        pass
-    return defaults["accounts"]
+    return accounts, token, key
 
 
-ACCOUNTS = load_accounts()
+ACCOUNTS, GUEST_TOKEN, SECRET_KEY = load_config()
 app = Flask(__name__)
-app.secret_key = os.environ.get("MEDIA_SITE_SECRET", uuid.uuid4().hex)
+app.secret_key = os.environ.get("MEDIA_SITE_SECRET") or SECRET_KEY
 app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_MB * 1024 * 1024
+# 会话 Cookie 安全属性：HttpOnly 防脚本读取；SameSite=Lax 防跨站 CSRF 提交
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# 反代（Nginx 等）后取真实客户端 IP，用于登录限流
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
+
+# ===== 登录限流：每 IP 每 5 分钟最多 8 次失败（线程安全） =====
+LOGIN_LIMIT = 8
+LOGIN_WINDOW = 300  # 秒
+_login_fails = {}  # {ip: [首次失败时间戳, 失败次数]}
+_login_lock = threading.Lock()
+
+
+def login_fail(ip):
+    now = time.time()
+    with _login_lock:
+        rec = _login_fails.get(ip)
+        if not rec or now - rec[0] > LOGIN_WINDOW:
+            _login_fails[ip] = [now, 1]
+        else:
+            rec[1] += 1
+
+
+def login_blocked(ip):
+    with _login_lock:
+        rec = _login_fails.get(ip)
+        if not rec:
+            return False
+        now = time.time()
+        if now - rec[0] > LOGIN_WINDOW:
+            _login_fails.pop(ip, None)
+            return False
+        return rec[1] >= LOGIN_LIMIT
+
+
+def login_reset(ip):
+    with _login_lock:
+        _login_fails.pop(ip, None)
+
+
+@app.after_request
+def security_headers(resp):
+    """全站安全响应头：防 MIME 嗅探 / 点击劫持 / 泄露来源。"""
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    return resp
 
 
 def check_login(identifier, password):
@@ -80,6 +137,9 @@ def login_required(f):
         # 预览模式（MEDIA_PREVIEW=1）仅用于本地截图查看页面效果，正常使用不受影响
         if os.environ.get("MEDIA_PREVIEW") == "1":
             return f(*args, **kwargs)
+        # 访客（guest）只读：GET 页面/媒体全部放行；POST（上传/删除）仍须登录
+        if session.get("guest") and request.method == "GET":
+            return f(*args, **kwargs)
         if not session.get("logged_in"):
             if request.path.startswith("/api/"):
                 return jsonify({"ok": False, "error": "未登录"}), 401
@@ -95,6 +155,27 @@ def file_kind(name):
     if ext in VIDEO_EXTS:
         return "video"
     return None
+
+
+# 常见图片格式文件头（宽松校验：只拦明显伪造，不误伤合法文件）
+_IMAGE_MAGIC = {
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".gif": (b"GIF87a", b"GIF89a"),
+    ".webp": (b"RIFF",),
+    ".bmp": (b"BM",),
+}
+
+
+def looks_like_image(ext, head):
+    """校验常见图片文件头；未知/视频类型不做校验（宽松放行）。"""
+    magics = _IMAGE_MAGIC.get(ext)
+    if not magics:
+        return True
+    if ext == ".webp":
+        return head[:4] == b"RIFF" and head[8:12] == b"WEBP"
+    return any(head.startswith(m) for m in magics)
 
 
 def sector_dir(sec):
@@ -136,12 +217,19 @@ def fmt_size(n):
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        get_flashed_messages()  # 清空历史 flash，只保留本次提示
+        ip = request.remote_addr or "?"
+        if login_blocked(ip):
+            flash("尝试过于频繁，请 5 分钟后再试")
+            return redirect(url_for("login"))
         identifier = request.form.get("identifier", "")
         pwd = request.form.get("password", "")
         if check_login(identifier, pwd):
+            login_reset(ip)
             session["logged_in"] = True
             session["username"] = identifier.strip()
             return redirect(url_for("index"))
+        login_fail(ip)
         flash("用户名/邮箱或密码不正确")
         return redirect(url_for("login"))
     return render_template("login.html")
@@ -151,6 +239,24 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/guest/<token>")
+def guest(token):
+    """访客链接：token 正确则标记为访客（只读），跳转大厅。"""
+    if hmac.compare_digest(token, GUEST_TOKEN):
+        session["guest"] = True
+        session.pop("logged_in", None)
+        return redirect(url_for("index"))
+    abort(404)
+
+
+@app.route("/guest/enter", methods=["POST"])
+def guest_enter():
+    """登录页「访客登录」按钮：标记访客（只读）并进入大厅。"""
+    session["guest"] = True
+    session.pop("logged_in", None)
+    return redirect(url_for("index"))
 
 
 @app.route("/")
@@ -173,6 +279,15 @@ def sector_inner(n):
     if n not in (1, 2, 3, 4):
         abort(404)
     return render_template("sector_inner.html", n=n)
+
+
+@app.route("/sector/<int:n>/story")
+@login_required
+def sector_story(n):
+    # 故事阅读页：仅 DREAM(1) 有「梦（上）」故事
+    if n != 1:
+        abort(404)
+    return render_template("story.html", n=n)
 
 
 @app.route("/api/media")
@@ -210,6 +325,11 @@ def api_upload():
             final = f"{name}({i}){ext}"
             i += 1
         try:
+            # 图片文件头校验：拦截内容与扩展名明显不符的伪装文件
+            head = f.stream.read(16)
+            if not looks_like_image(ext, head):
+                errors.append(f"{base_name}: 文件内容与扩展名不符")
+                continue
             f.save(os.path.join(base, final))
             results.append({"name": final, "kind": kind})
         except Exception as e:
@@ -235,8 +355,9 @@ def api_delete():
     try:
         os.remove(p)
         return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    except OSError:
+        # 不返回具体错误（避免泄露服务器路径信息）
+        return jsonify({"ok": False, "error": "删除失败"}), 500
 
 
 @app.route("/media/<path:name>")
@@ -248,7 +369,11 @@ def media(name):
     name = os.path.basename(name)
     if not os.path.isfile(os.path.join(base, name)):
         abort(404)
-    return send_from_directory(base, name, conditional=True)
+    resp = send_from_directory(base, name, conditional=True)
+    # SVG 可能内嵌脚本：CSP sandbox 沙箱化，阻止脚本执行（防存储型 XSS）
+    if name.lower().endswith(".svg"):
+        resp.headers["Content-Security-Policy"] = "sandbox"
+    return resp
 
 
 if __name__ == "__main__":
@@ -258,6 +383,7 @@ if __name__ == "__main__":
     print(f"  上传目录:  {UPLOAD_DIR}")
     print(f"  账号配置:  {CONFIG_PATH}")
     print(f"  已配置账号: {len(ACCOUNTS)} 个")
+    print(f"  访客链接:   http://127.0.0.1:8899/guest/{GUEST_TOKEN[:4]}…（完整 token 见 config.json）")
     print("  按 Ctrl+C 停止")
     print("=" * 56)
     app.run(host="127.0.0.1", port=8899, debug=False, threaded=True)

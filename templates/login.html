@@ -61,12 +61,26 @@
     font-family: inherit; cursor:pointer; z-index:20;
     box-shadow:0 14px 44px rgba(0,0,0,.55), 0 0 34px rgba(122,178,255,.22);
     transition:opacity .35s ease, transform .35s ease, box-shadow .3s ease;
+    /* 呼吸灯 + 浮动动画（无限循环） */
+    animation:helloFloat 3.2s ease-in-out infinite, helloBreath 2.6s ease-in-out infinite;
+  }
+  /* 浮动：按钮上下缓慢漂浮 */
+  @keyframes helloFloat {
+    0%, 100% { transform:translate(-50%,-50%) translateY(0); }
+    50%      { transform:translate(-50%,-50%) translateY(-12px); }
+  }
+  /* 呼吸灯：蓝色光晕强弱脉动 */
+  @keyframes helloBreath {
+    0%, 100% { box-shadow:0 14px 44px rgba(0,0,0,.55), 0 0 16px rgba(122,178,255,.22); }
+    50%      { box-shadow:0 14px 44px rgba(0,0,0,.55), 0 0 52px rgba(122,178,255,.6); }
   }
   .hello-btn:hover {
+    animation:none;   /* 暂停动画让 hover 的放大/光晕生效 */
     box-shadow:0 16px 52px rgba(0,0,0,.6), 0 0 48px rgba(122,178,255,.45);
     transform:translate(-50%,-50%) scale(1.05);
   }
   .hello-btn.hide {
+    animation:none;   /* 暂停动画让隐藏的缩小淡出生效 */
     opacity:0; transform:translate(-50%,-50%) scale(.5);
     pointer-events:none;
   }
@@ -199,6 +213,20 @@
     text-shadow:0 0 12px rgba(120,160,230,.45);
   }
 
+  /* ===== 进入方式选择卡片（点击 HELLO 后先出现）：访客登录 / 白名单登录 =====
+     复用 .card 纸张样式；仅控制显示切换，原登录名片样式完全不动 */
+  .entry-card { display:none; }
+  body.open .entry-card { display:block; }
+  body.open #loginCard { display:none; }
+  body.member .entry-card { display:none; }
+  body.member #loginCard { display:block; }
+  /* 切换到白名单登录名片时轻微淡入（不改原卡片任何样式） */
+  #loginCard.cardIn { animation:cardIn .6s ease; }
+  @keyframes cardIn {
+    from { opacity:0; transform:translateY(14px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
   /* BGM 播放器按钮：专辑封面 + 播放时旋转（黑胶效果）
      初始隐藏，点击 HELLO 展开后淡入 */
   .music-btn {
@@ -286,7 +314,21 @@
     <div class="lyrics-inner" id="lyricsInner"></div>
   </div>
   <div class="card-wrap" id="cardWrap">
-    <div class="card">
+    <div class="card entry-card" id="entryCard">
+      <img class="corner tl" src="/static/corner-emoji.gif" alt="">
+      <img class="corner tr" src="/static/corner-emoji.gif" alt="">
+      <img class="corner bl" src="/static/corner-emoji.gif" alt="">
+      <img class="corner br" src="/static/corner-emoji.gif" alt="">
+      <div class="title">
+        <span class="line1">here is my</span>
+        <span class="line2">BURN MEMORY</span>
+      </div>
+      <div class="subtitle">choose how to enter</div>
+      <button type="button" id="guestBtn">GUEST · 访客登录</button>
+      <button type="button" id="memberBtn">MEMBER · 白名单登录</button>
+      <div class="foot">private</div>
+    </div>
+    <div class="card" id="loginCard">
     <img class="corner tl" src="/static/corner-emoji.gif" alt="">
     <img class="corner tr" src="/static/corner-emoji.gif" alt="">
     <img class="corner bl" src="/static/corner-emoji.gif" alt="">
@@ -378,6 +420,31 @@
   btn.addEventListener('click', function(e){
     e.stopPropagation();
     if (bgm.paused){ start(); } else { stop(); }
+  });
+})();
+
+/* 进入方式选择：访客登录直接进入（只读）；白名单登录展开原密码名片 */
+(function(){
+  var guestBtn = document.getElementById('guestBtn');
+  var memberBtn = document.getElementById('memberBtn');
+  var loginCard = document.getElementById('loginCard');
+  if (!guestBtn || !memberBtn) return;
+  // 访客登录：POST /guest/enter → 标记访客（只读）进入大厅
+  guestBtn.addEventListener('click', function(){
+    var f = document.createElement('form');
+    f.method = 'post';
+    f.action = '/guest/enter';
+    document.body.appendChild(f);
+    f.submit();
+  });
+  // 白名单登录：隐藏选择卡片，显示原登录名片（样式不变）
+  memberBtn.addEventListener('click', function(){
+    document.body.classList.add('member');
+    if (loginCard){
+      loginCard.classList.remove('cardIn');
+      void loginCard.offsetWidth;
+      loginCard.classList.add('cardIn');
+    }
   });
 })();
 

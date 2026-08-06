@@ -35,6 +35,7 @@
     background:rgba(255,255,255,.12);
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
     color:#fff; font-size:18px; cursor:pointer;
+    position:relative; z-index:50;   /* 高于左右切换热区，避免误触 */
     display:flex; align-items:center; justify-content:center;
     transition:background .25s, border-color .25s;
     font-family:inherit; text-decoration:none;
@@ -52,6 +53,7 @@
   .d-stack {
     position:fixed; left:50%; top:50%;
     transform:translate(-50%,-50%);
+    z-index:40;   /* 高于切换热区，保证卡片区域点击=跳转 */
     width:min(960px, 86vw); height:min(660px, 74vh);
   }
   .d-card {
@@ -70,9 +72,10 @@
   }
   .d-card:hover { border-color:rgba(255,255,255,.9); }
   .d-title {
-    font-size:44px; letter-spacing:6px; color:#eef3ff;
+    font-size:38px; letter-spacing:4px; color:#eef3ff;
     text-shadow:0 0 16px rgba(122,178,255,.5);
     user-select:none;
+    white-space:nowrap;
   }
   /* 扑克牌抛出动画：按当前卡编号飞出方向（1左上 2右上 3右下 4左下） */
   .d-card.fly-out { animation:flyAway .6s cubic-bezier(.3,.7,.4,1) forwards; }
@@ -85,34 +88,13 @@
   @keyframes fly3 { to { transform:translate(78vw,78vh) rotate(42deg) scale(.4); opacity:0; } }
   @keyframes fly4 { to { transform:translate(-78vw,78vh) rotate(-42deg) scale(.4); opacity:0; } }
 
-  /* 左右切换箭头：常态隐藏，鼠标移到网页左右边缘时显现 */
+  /* 左右切换热区：透明，点击任意位置切换板块（大范围，卡片之上不可点） */
   .edge-left, .edge-right {
-    position:fixed; top:0; bottom:0; width:110px; z-index:30;
-    display:flex; align-items:center; justify-content:center;
+    position:fixed; top:0; bottom:0; width:260px; z-index:30;
+    cursor:pointer;
   }
   .edge-left { left:0; }
   .edge-right { right:0; }
-  .arrow {
-    width:58px; height:58px; border-radius:50%;
-    border:1.5px solid rgba(122,178,255,.7);
-    background:rgba(10,16,30,.45);
-    color:#cfe0ff; font-size:30px; line-height:1;
-    display:flex; align-items:center; justify-content:center;
-    cursor:pointer; user-select:none;
-    opacity:0;
-    transform:translateY(6px) scale(.9);
-    transition:opacity .35s ease, transform .35s ease, background .3s ease, border-color .3s ease, box-shadow .3s ease;
-    pointer-events:none;
-  }
-  .edge-left:hover .arrow, .edge-right:hover .arrow {
-    opacity:1; transform:translateY(0) scale(1);
-    pointer-events:auto;
-  }
-  .arrow:hover {
-    background:rgba(122,178,255,.28);
-    border-color:rgba(150,195,255,.95);
-    box-shadow:0 0 22px rgba(122,178,255,.4);
-  }
 
 
   /* 上传卡片：毛玻璃 */
@@ -193,6 +175,11 @@
   }
   .music-btn.playing { animation:vinylSpin 9s linear infinite; }
   @keyframes vinylSpin { from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+  /* 专辑封面：圆形裁剪填满按钮（与大厅播放器一致） */
+  .music-btn .cover {
+    display:block; width:100%; height:100%;
+    object-fit:cover; border-radius:50%;
+  }
   .music-btn::after {
     content:""; position:absolute; left:50%; top:50%;
     width:10px; height:10px; border-radius:50%;
@@ -226,9 +213,59 @@
     from { opacity:.2; transform:translateY(5px); }
     to   { opacity:1; transform:translateY(0); }
   }
+
+  /* ===== 加载画面：与大厅一致（BURN MEMORY 加载动画） ===== */
+  .loader {
+    position:fixed; inset:0; z-index:200;
+    background:#000;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:26px;
+    transition:opacity .55s ease, visibility .55s;
+  }
+  .loader.hide { opacity:0; visibility:hidden; pointer-events:none; }
+  .loader-title {
+    font-size:44px; font-weight:700; letter-spacing:8px;
+    color:#eef3ff;
+    text-shadow:0 0 18px rgba(122,178,255,.8), 0 0 46px rgba(122,178,255,.35);
+    animation:loaderPulse 1.6s ease-in-out infinite;
+  }
+  .loader-sub {
+    font-size:15px; letter-spacing:4px; color:#7f93bd;
+    font-family:'FZShuTi','方正舒体','KaiTi','楷体',cursive;
+  }
+  .loader-progress { display:flex; flex-direction:column; align-items:center; gap:12px; }
+  .loader-bar {
+    width:min(340px, 62vw); height:6px;
+    border-radius:3px; overflow:hidden;
+    background:rgba(255,255,255,.14);
+    border:1px solid rgba(255,255,255,.22);
+  }
+  .loader-bar .fill {
+    height:100%; width:0%;
+    background:linear-gradient(90deg,#4f8ef7,#7ab2ff);
+    border-radius:3px;
+    transition:width .12s linear;
+    box-shadow:0 0 12px rgba(122,178,255,.6);
+  }
+  .loader-pct {
+    font-size:16px; letter-spacing:2px; color:#9fb0d0;
+  }
+  @keyframes loaderPulse {
+    0%,100% { opacity:1; }
+    50%     { opacity:.55; }
+  }
 </style>
 </head>
 <body>
+  <div class="loader" id="loader">
+    <div class="loader-title">BURN MEMORY</div>
+    <div class="loader-sub">私 人 记 忆 空 间</div>
+    <div class="loader-progress">
+      <div class="loader-bar"><div class="fill" id="loadFill"></div></div>
+      <div class="loader-pct" id="loadPct">0%</div>
+    </div>
+  </div>
+
   <div class="bg"></div>
 
   <div class="top">
@@ -240,13 +277,13 @@
     {% if n == 1 %}
     <!-- DREAM 板块：叠加卡组（四张卡层叠，点击卡片进入内部，左右箭头切换） -->
     <div class="d-stack" id="dStack">
-      <div class="d-card d1 active"><span class="d-title">01</span></div>
-      <div class="d-card d2"><span class="d-title">02</span></div>
-      <div class="d-card d3"><span class="d-title">03</span></div>
-      <div class="d-card d4"><span class="d-title">04</span></div>
+      <div class="d-card d1 active"><span class="d-title">梦 PART 1</span></div>
+      <div class="d-card d2"><span class="d-title">梦 PART 2</span></div>
+      <div class="d-card d3"><span class="d-title">梦 PART 3</span></div>
+      <div class="d-card d4"><span class="d-title">梦 PART 4</span></div>
     </div>
-    <div class="edge-left" id="edgeL"><div class="arrow" id="arrowL" title="上一板块">‹</div></div>
-    <div class="edge-right" id="edgeR"><div class="arrow" id="arrowR" title="下一板块">›</div></div>
+    <div class="edge-left" id="edgeL" title="上一板块"></div>
+    <div class="edge-right" id="edgeR" title="下一板块"></div>
     {% else %}
     <div class="upload-zone" id="zone">
       <div class="big">📁 点击选择 或 拖拽文件到这里上传</div>
@@ -262,7 +299,7 @@
 
   <audio id="bgm" loop preload="auto"></audio>
   <div class="player-box">
-    <button id="musicBtn" class="music-btn" title="播放/暂停音乐">♪</button>
+    <button id="musicBtn" class="music-btn" title="播放/暂停音乐"><img class="cover" src="/static/dream-cover.jpg" alt="Imagine Dragons - Evolve"></button>
     <div class="lyric-bar" id="lyricBar">
       <div class="l-text">
         <div class="l-en" id="lEn">Loading...</div>
@@ -370,12 +407,12 @@ if (zone && fileInput){
   fileInput.onchange = () => { if (fileInput.files.length) upload(fileInput.files); };
 }
 
-/* DREAM 叠加卡组：左右箭头切换板块（旧卡扑克牌飞出），点击卡片跳转内部页 */
+/* DREAM 叠加卡组：点击页面左右两侧任意位置切换板块（旧卡扑克牌飞出），点击卡片跳转内部页 */
 (function(){
   if (SEC !== 1) return;
   var cards = document.querySelectorAll('.d-card');
-  var arrowL = document.getElementById('arrowL');
-  var arrowR = document.getElementById('arrowR');
+  var edgeL = document.getElementById('edgeL');
+  var edgeR = document.getElementById('edgeR');
   if (!cards.length) return;
   var cur = 0, busy = false;
   function show(i){
@@ -392,10 +429,16 @@ if (zone && fileInput){
       busy = false;
     }, 600);
   }
-  if (arrowL) arrowL.addEventListener('click', function(){ show(cur - 1); });
-  if (arrowR) arrowR.addEventListener('click', function(){ show(cur + 1); });
-  // 点击卡片 → 跳转内部页（梦：上传空间）
-  cards.forEach(function(c){ c.addEventListener('click', function(){ location.href = '/sector/1/inner'; }); });
+  // 点击页面左右两侧任意位置即可切换（箭头为 hover 视觉提示，点击同样生效）
+  if (edgeL) edgeL.addEventListener('click', function(){ show(cur - 1); });
+  if (edgeR) edgeR.addEventListener('click', function(){ show(cur + 1); });
+  // 点击卡片：仅开放第一章节（01 → 故事阅读页），后续章节暂不开放
+  cards.forEach(function(c, i){
+    c.addEventListener('click', function(){
+      if (i !== 0) return;   // 梦 PART 2/3/4 暂不开放
+      location.href = '/sector/1/story';
+    });
+  });
 })();
 
 async function upload(files){
@@ -446,19 +489,13 @@ async function upload(files){
   if (lEn) lEn.textContent = info.title;
   if (lCn) lCn.textContent = 'SECTOR ' + SEC;
 
-  var played = false;
   function start(){
     var p = bgm.play();
-    if (p && p.then) p.then(function(){ played = true; btn.classList.add('playing'); removeUnlock(); }).catch(function(){});
-    else { played = true; btn.classList.add('playing'); removeUnlock(); }
+    if (p && p.then) p.then(function(){ btn.classList.add('playing'); }).catch(function(){});
+    else { btn.classList.add('playing'); }
   }
   function stop(){ bgm.pause(); btn.classList.remove('playing'); }
-  function unlock(){ if (!played && bgm.paused){ start(); } }
-  function removeUnlock(){
-    ['pointerdown','keydown','touchstart','click'].forEach(function(ev){ document.removeEventListener(ev, unlock); });
-  }
-  ['pointerdown','keydown','touchstart','click'].forEach(function(ev){ document.addEventListener(ev, unlock); });
-  start();
+  // 四个板块页面进入时不主动播放音乐：仅点击播放器按钮时才播放/暂停
   btn.addEventListener('click', function(e){ e.stopPropagation(); if (bgm.paused){ start(); } else { stop(); } });
 })();
 
@@ -557,6 +594,24 @@ async function upload(files){
 
 
 load();
+
+/* 加载画面：进度条 + 百分数，进度走满后淡出 */
+(function(){
+  var loader = document.getElementById('loader');
+  if (!loader) return;
+  var fill = document.getElementById('loadFill');
+  var pct = document.getElementById('loadPct');
+  var p = 0;
+  var iv = setInterval(function(){
+    p = Math.min(100, p + 8.33);
+    if (fill) fill.style.width = p.toFixed(0) + '%';
+    if (pct) pct.textContent = Math.floor(p) + '%';
+    if (p >= 100){
+      clearInterval(iv);
+      setTimeout(function(){ loader.classList.add('hide'); }, 150);
+    }
+  }, 60);
+})();
 </script>
 </body>
 </html>
