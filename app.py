@@ -18,15 +18,22 @@ from flask import (Flask, request, redirect, url_for, render_template,
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = r"F:\media-site-uploads"
+# 上传目录：可用环境变量 MEDIA_SITE_UPLOADS 覆盖（便于部署迁移）
+UPLOAD_DIR = os.environ.get("MEDIA_SITE_UPLOADS") or r"F:\media-site-uploads"
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# 服务端口与监听地址（双栈：IPv4 + IPv6）
+PORT = 8899
+HOST_V4 = "0.0.0.0"
+HOST_V6 = "::"
 
 # 允许的扩展名（图片 + 视频）
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".avif", ".heic"}
 VIDEO_EXTS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".m4v", ".wmv", ".ts"}
 ALLOWED_EXTS = IMAGE_EXTS | VIDEO_EXTS
 MAX_FILE_MB = 2048  # 单文件最大 2GB
+VALID_SECTORS = (1, 2, 3, 4)  # 四个板块编号
 
 
 def load_config():
@@ -114,6 +121,10 @@ def security_headers(resp):
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("Referrer-Policy", "same-origin")
+    # 静态资源（音乐/视频/图片）允许 Cloudflare 边缘缓存，减少隧道回源流量
+    # （Werkzeug 静态响应默认 no-cache，需强制覆盖）
+    if request.path.startswith("/static/"):
+        resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
 
 
@@ -183,6 +194,16 @@ def sector_dir(sec):
     d = os.path.join(UPLOAD_DIR, f"sector{sec}")
     os.makedirs(d, exist_ok=True)
     return d
+
+
+def parse_sec(value):
+    """把请求参数里的板块号（"1"~"4"）解析为 int；非法/缺失返回 None。"""
+    return int(value) if value in ("1", "2", "3", "4") else None
+
+
+def valid_sector(n):
+    """板块号是否合法（1~4）。"""
+    return n in VALID_SECTORS
 
 
 def list_media(sec=None):
@@ -259,6 +280,8 @@ def guest_enter():
     return redirect(url_for("index"))
 
 
+# ========== 页面路由 ==========
+
 @app.route("/")
 @login_required
 def index():
@@ -268,7 +291,7 @@ def index():
 @app.route("/sector/<int:n>")
 @login_required
 def sector(n):
-    if n not in (1, 2, 3, 4):
+    if not valid_sector(n):
         abort(404)
     return render_template("sector.html", n=n)
 
@@ -276,7 +299,7 @@ def sector(n):
 @app.route("/sector/<int:n>/inner")
 @login_required
 def sector_inner(n):
-    if n not in (1, 2, 3, 4):
+    if not valid_sector(n):
         abort(404)
     return render_template("sector_inner.html", n=n)
 
@@ -290,19 +313,19 @@ def sector_story(n):
     return render_template("story.html", n=n)
 
 
+# ========== 数据 API（JSON） ==========
+
 @app.route("/api/media")
 @login_required
 def api_media():
-    sec = request.args.get("sec")
-    sec = int(sec) if sec in ("1", "2", "3", "4") else None
+    sec = parse_sec(request.args.get("sec"))
     return jsonify({"ok": True, "items": list_media(sec)})
 
 
 @app.route("/api/upload", methods=["POST"])
 @login_required
 def api_upload():
-    sec = request.args.get("sec")
-    sec = int(sec) if sec in ("1", "2", "3", "4") else None
+    sec = parse_sec(request.args.get("sec"))
     base = sector_dir(sec) if sec else UPLOAD_DIR
     files = request.files.getlist("files")
     if not files or all(f.filename == "" for f in files):
@@ -341,8 +364,7 @@ def api_upload():
 @app.route("/api/delete", methods=["POST"])
 @login_required
 def api_delete():
-    sec = request.args.get("sec")
-    sec = int(sec) if sec in ("1", "2", "3", "4") else None
+    sec = parse_sec(request.args.get("sec"))
     base = sector_dir(sec) if sec else UPLOAD_DIR
     data = request.get_json(silent=True) or {}
     name = data.get("name", "")
@@ -360,11 +382,12 @@ def api_delete():
         return jsonify({"ok": False, "error": "删除失败"}), 500
 
 
+# ========== 媒体文件（登录/访客只读） ==========
+
 @app.route("/media/<path:name>")
 @login_required
 def media(name):
-    sec = request.args.get("sec")
-    sec = int(sec) if sec in ("1", "2", "3", "4") else None
+    sec = parse_sec(request.args.get("sec"))
     base = sector_dir(sec) if sec else UPLOAD_DIR
     name = os.path.basename(name)
     if not os.path.isfile(os.path.join(base, name)):
@@ -376,14 +399,28 @@ def media(name):
     return resp
 
 
-if __name__ == "__main__":
+def print_banner():
+    """启动横幅：展示访问地址与关键配置（访客 token 仅显示前 4 位防泄露）。"""
     print("=" * 56)
     print("  私人媒体站已启动")
-    print(f"  访问地址:  http://127.0.0.1:8899")
+    print(f"  访问地址:  http://127.0.0.1:{PORT}  (IPv4) / http://[IPv6]:{PORT} (IPv6)")
     print(f"  上传目录:  {UPLOAD_DIR}")
     print(f"  账号配置:  {CONFIG_PATH}")
     print(f"  已配置账号: {len(ACCOUNTS)} 个")
-    print(f"  访客链接:   http://127.0.0.1:8899/guest/{GUEST_TOKEN[:4]}…（完整 token 见 config.json）")
+    print(f"  访客链接:   http://127.0.0.1:{PORT}/guest/{GUEST_TOKEN[:4]}…（完整 token 见 config.json）")
     print("  按 Ctrl+C 停止")
     print("=" * 56)
-    app.run(host="127.0.0.1", port=8899, debug=False, threaded=True)
+
+
+def run_dual_stack():
+    """双栈监听：IPv4 (0.0.0.0) + IPv6 (::) 同端口，两个线程各绑一个地址族。"""
+    threading.Thread(
+        target=lambda: app.run(host=HOST_V4, port=PORT, debug=False, threaded=True),
+        daemon=True,
+    ).start()
+    app.run(host=HOST_V6, port=PORT, debug=False, threaded=True)
+
+
+if __name__ == "__main__":
+    print_banner()
+    run_dual_stack()
